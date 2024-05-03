@@ -5,7 +5,8 @@ import { ipcRenderer } from 'electron'
 // Custom APIs for renderer
 const api = {
   idletimer: (callback) => ipcRenderer.on("idletime", callback),
-  screenshotSrc: (callback) => ipcRenderer.on("ssUrl", callback)
+  screenshotSrc: (callback) => ipcRenderer.on("ssUrl", callback),
+  showidlemoadl : (callback) => ipcRenderer.on("showIdlemodal" , callback)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

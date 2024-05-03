@@ -2,9 +2,11 @@ import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { dialog, app } from 'electron'
+import { execSync } from 'child_process'
 
 const isPackaged = app.isPackaged
 const processes = {} // This will track each spawned process by type
+
 
 let interactionTimestamps = []
 let interactionActivityTimestamps = []
@@ -17,6 +19,7 @@ export function getInteractionTimestamps() {
 }
 
 export function resetInteractionTimeStampsForActivity () {
+  console.log("resetInteractionTimeStampsForActivity trigered")
   return interactionActivityTimestamps = []
 }
 
@@ -52,37 +55,81 @@ function handleData(data, type, mainWindow) {
   }
 }
 
+const COMMAND_GET_INPUT_DEVICE_EVENT_NUMBER =
+  "grep -E 'Handlers|EV=' /proc/bus/input/devices |" +
+  "grep -B1 'EV=120013' |" +
+  "grep -Eo 'event[0-9]+' |" +
+  "grep -Eo '[0-9]+' |" +
+  "tr -d '\n'";
+
+function executeCommand(cmd) {
+  try {
+    console.log("loll");
+    const result = execSync(cmd, { encoding: "utf-8" });
+    return result.trim();
+  } catch (error) {
+    console.error(`Error executing command: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+export function getInputDevicePath() {
+  const eventNumber = executeCommand(COMMAND_GET_INPUT_DEVICE_EVENT_NUMBER);
+  console.log(eventNumber, "event")
+  return `/dev/input/event${eventNumber}`;
+}
+
 // Main function to start detection
 export function startDetection(detectionType, mainWindow) {
-  detectionStatus = true
-  const baseFilename =
-    detectionType === 'mouse' ? 'resources/MouseTracker' : 'resources/Keyboardtracker'
-  const macFilename = detectionType === 'mouse' ? './resources/mousemac' : './resources/keyboardmac'
-  let executablePath
+  detectionStatus = true;
+  let executablePath;
 
-  if (isPackaged) {
-    executablePath =
-      process.platform === 'win32'
-        ? path.join(process.resourcesPath, 'app.asar.unpacked', `${baseFilename}.exe`)
-        : path.join(process.resourcesPath, detectionType === 'mouse' ?'mousemac' : 'keyboardmac')
+  if (process.platform === 'linux') {
+    if (detectionType === 'mouse') {
+      const mouseCommand = 'cat';
+      const args = ['/dev/input/mice'];
+      executablePath = spawn(mouseCommand, args);
+    } else if (detectionType === 'keyboard') {
+      // Adjust this according to your keyboard input detection method
+      // For simplicity, let's assume 'cat' on a keyboard device file.
+      const keyboardCommand = 'cat';
+      const keyboardArgs = getInputDevicePath()
+      const args = [keyboardArgs]; // Replace 'eventX' with the appropriate device file for your keyboard.
+      executablePath = spawn(keyboardCommand, args);
+    } else {
+      console.error('Unsupported detection type on Linux.');
+      return;
+    }
   } else {
-    executablePath = process.platform === 'win32' ? `./${baseFilename}.exe` : `./${macFilename}`
+    const baseFilename =
+      detectionType === 'mouse' ? 'resources/MouseTracker' : 'resources/KeyboardTracker';
+    const filenameExtension = process.platform === 'win32' ? '.exe' : '';
+    const filename = detectionType === 'mouse' ? 'mousemac' : 'keyboardmac';
+    executablePath = isPackaged
+      ? path.join(process.resourcesPath, 'app.asar.unpacked', `${baseFilename}${filenameExtension}`)
+      : `./${filename}`;
   }
 
-  if (!checkExecutableExists(executablePath)) return
+  // Check if executablePath is valid before proceeding
+  if (!executablePath) {
+    console.error('Executable path not found.');
+    return;
+  }
 
-  processes[detectionType] = spawn(executablePath)
+  processes[detectionType] = executablePath;
 
-  processes[detectionType].stdout.on('data', (data) => handleData(data, detectionType, mainWindow))
-  processes[detectionType].stderr.on('data', (data) => {
-    console.error(`stderr: ${data}`)
-    dialog.showErrorBox('Error', `${data}`)
-  })
-  processes[detectionType].on('close', (code) => {
-    console.log(`${baseFilename} process exited with code ${code}`)
-    delete processes[detectionType] // Remove the reference once the process has exited
-  })
+  // Assuming handleData function is defined elsewhere
+  executablePath.stdout.on('data', (data) => handleData(data, detectionType, mainWindow));
+  executablePath.stderr.on('data', (data) => {
+    console.error(`stderr: ${data}`);
+    dialog.showErrorBox('Error', `${data}`);
+  });
+  executablePath.on('close', (code) => {
+    console.log(`${detectionType} process exited with code ${code}`);
+    delete processes[detectionType]; // Remove the reference once the process has exited
+  });
 }
+
 
 export function stopDetection(detectionType) {
   detectionStatus = false

@@ -21,7 +21,9 @@
     "@electron-toolkit/preload": "^3.0.0",
     "@electron-toolkit/utils": "^3.0.0",
     "electron-dialog": "^2.0.0",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "react-bootstrap": "^2.10.2",
+    "sudo-prompt": "^9.2.1"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^1.0.2",

@@ -1,4 +1,7 @@
 import { desktopCapturer, screen, Notification } from 'electron';
+import { exec } from 'child_process'
+import fs from "fs"
+import path from 'path';
 
 
 
@@ -30,3 +33,36 @@ export default async function takeScreenshot() {
     throw error;
   }
 }
+
+export function takeScreenshotLinux() {
+  console.log("screenshot execution")
+  const screenshotPath = path.join(__dirname, 'screenshotoll.png');
+
+  exec(`gnome-screenshot -d 2 -f "${screenshotPath}"`, (error, stdout, stderr) => {
+      if (error) {
+          console.error(`Error: ${error.message}`);
+          return;
+      }
+      if (stderr) {
+          console.error(`stderr: ${stderr}`);
+          return;
+      }
+      console.log(`stdout: ${stdout}`);
+
+      fs.readFile(screenshotPath, (err, data) => {
+          if (err) {
+              console.error(`Error reading file: ${err}`);
+              return;
+          }
+
+          console.log('Screenshot data loaded, file size:', data.length);
+
+          const notification = new Notification({
+              title: "Screenshot Taken",
+              body: "Screenshot has been captured successfully",
+          });
+          notification.show();
+      });
+  });
+}
+

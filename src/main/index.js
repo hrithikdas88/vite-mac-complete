@@ -1,12 +1,15 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, ipcRenderer } from 'electron'
-import { join } from 'path'
+import { app, shell, BrowserWindow, ipcMain, dialog, ipcRenderer, Notification } from 'electron'
+import path, { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { startDetection, stopDetection, getInteractionTimestamps, resetInteractionTimeStampsForActivity } from './InputDetection'
 import takeScreenshot from './CronJobs'
 import cron from 'node-cron'
 import { calculateActivityPercentage, calculateIdleTime } from './ActivityAnalyser'
-import Dialog from 'electron-dialog';
+import { GivePermission } from './Permissions'
+import { takeScreenshotLinux } from './CronJobs'
+
+
 
 const isPackaged = app.isPackaged
 let mainWindow
@@ -63,6 +66,11 @@ app.whenReady().then(() => {
   ipcMain.on('ping', () => console.log('pong'))
 
   createWindow()
+  if (process.platform === "linux") {
+    GivePermission()
+
+  }
+
 
   // startMouseMovementDetectionwin()
 
@@ -100,20 +108,21 @@ let Cronjob
 ipcMain.on('startdetection', () => {
   startDetection('mouse', mainWindow)
   startDetection('keyboard', mainWindow)
-  Cronjob =  cron.schedule('* * * * *', () => {
+  Cronjob = cron.schedule('* * * * *', () => {
     console.log('running a task every minute')
     const activityArr = getInteractionTimestamps()
     const currenttimestamp = Date.now()
     const idleTime = calculateIdleTime(activityArr?.interactionTimestamps, currenttimestamp)
-    idleTime > 0 ? dialog.showMessageBox({
-      title: 'Hello',
-      message: 'idle alert',
-      buttons: ['OK']
-    }) :
+    idleTime > 0 ? mainWindow.webContents.send("showIdlemodal", idleTime) :
     console.log(idleTime, "idletime")
     const activityPersent = calculateActivityPercentage(activityArr?.interactionActivityTimestamps, 60)
     console.log(activityPersent, "activity persentage")
-    handleScreenshot()
+    if (process.platform === "linux") {
+      takeScreenshotLinux()
+    } else {
+      handleScreenshot()
+    }
+
     resetInteractionTimeStampsForActivity()
   })
 })
@@ -126,3 +135,35 @@ ipcMain.on('stopdetection', () => {
 
 // In this file you can include the rest of your app"s specific main process
 // code. You can also put them in separate files and require them here.
+// function takeScreenshotLinux() {
+//   console.log("screenshot execution")
+//   const screenshotPath = path.join(__dirname, 'screenshotoll.png');
+
+//   exec(`gnome-screenshot -d 2 -f "${screenshotPath}"`, (error, stdout, stderr) => {
+//       if (error) {
+//           console.error(`Error: ${error.message}`);
+//           return;
+//       }
+//       if (stderr) {
+//           console.error(`stderr: ${stderr}`);
+//           return;
+//       }
+//       console.log(`stdout: ${stdout}`);
+
+//       fs.readFile(screenshotPath, (err, data) => {
+//           if (err) {
+//               console.error(`Error reading file: ${err}`);
+//               return;
+//           }
+
+//           console.log('Screenshot data loaded, file size:', data.length);
+
+//           const notification = new Notification({
+//               title: "Screenshot Taken",
+//               body: "Screenshot has been captured successfully",
+//           });
+//           notification.show();
+//       });
+//   });
+
+
