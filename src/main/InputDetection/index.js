@@ -18,7 +18,7 @@ export function getInteractionTimestamps() {
   };
 }
 
-export function resetInteractionTimeStampsForActivity () {
+export function resetInteractionTimeStampsForActivity() {
   console.log("resetInteractionTimeStampsForActivity trigered")
   return interactionActivityTimestamps = []
 }
@@ -34,7 +34,7 @@ function checkExecutableExists(executablePath) {
 }
 
 // Handles data from the process's stdout
-function handleData(data, type, mainWindow) {
+function handleData(data, type, mainWindow ) {
   if (data && detectionStatus) {
     const timestamp = new Date()
     const foridletimeChecker = timestamp.getTime()
@@ -42,7 +42,6 @@ function handleData(data, type, mainWindow) {
       time: foridletimeChecker,
       type: type // 'mouse' or 'keyboard'
     }
-
     interactionTimestamps.push(newEntry)
     interactionActivityTimestamps.push(newEntry)
     mainWindow.webContents.send("idletime", Date.now());
@@ -64,7 +63,6 @@ const COMMAND_GET_INPUT_DEVICE_EVENT_NUMBER =
 
 function executeCommand(cmd) {
   try {
-    console.log("loll");
     const result = execSync(cmd, { encoding: "utf-8" });
     return result.trim();
   } catch (error) {
@@ -75,13 +73,13 @@ function executeCommand(cmd) {
 
 export function getInputDevicePath() {
   const eventNumber = executeCommand(COMMAND_GET_INPUT_DEVICE_EVENT_NUMBER);
-  console.log(eventNumber, "event")
+  // console.log(eventNumber, "event")
   return `/dev/input/event${eventNumber}`;
 }
 
 // Main function to start detection
 export function startDetection(detectionType, mainWindow) {
-  detectionStatus = true;
+  detectionStatus = true; resetInteractionTimeStampsForActivity();
   let executablePath;
 
   if (process.platform === 'linux') {
@@ -118,7 +116,6 @@ export function startDetection(detectionType, mainWindow) {
 
   processes[detectionType] = executablePath;
 
-  // Assuming handleData function is defined elsewhere
   executablePath.stdout.on('data', (data) => handleData(data, detectionType, mainWindow));
   executablePath.stderr.on('data', (data) => {
     console.error(`stderr: ${data}`);
@@ -130,7 +127,7 @@ export function startDetection(detectionType, mainWindow) {
   });
 }
 
-
+// resetInteractionTimeStampsForActivity();
 export function stopDetection(detectionType) {
   detectionStatus = false
   const process = processes[detectionType]

@@ -14,6 +14,53 @@ import { takeScreenshotLinux } from './CronJobs'
 const isPackaged = app.isPackaged
 let mainWindow
 
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient("electron", process.execPath, [
+      path.resolve(process.argv[1]),
+      console.log(path.resolve(process.argv[1])),
+    ]);
+  }
+} else {
+  app.setAsDefaultProtocolClient("electron");
+}
+
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+  console.log("nolock");
+} else {
+  app.on("second-instance", (event, commandLine, workingDirectory) => {
+    console.log("yess");
+    // Someone tried to run a second instance, we should focus our window.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+
+    mainWindow.webContents.send("auth", {
+      commandLine,
+    });
+    dialog.showErrorBox(
+      "Welcome Back",
+      `You arrived from: ${commandLine.pop().slice(0, -1)}`
+    );
+  });
+
+  // // Create mainWindow, load the rest of the app, etc...
+  // app.whenReady().then(() => {
+  //   createWindow();
+  //   // setInterval(logCursorPosition, 10000);
+  // });
+
+  app.on("open-url", (event, url) => {
+    console.log("open-url event triggered:", url);
+
+    dialog.showErrorBox("Welcome Back", `You arrived from: ${url}`);
+  });
+}
+
 function createWindow() {
   // Create the browser window.
   mainWindow = new BrowserWindow({
@@ -25,6 +72,7 @@ function createWindow() {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
+
       devTools: true
     }
   })
@@ -56,7 +104,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron')
 
   // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
+  // and ignore CommandOrControl + R in production.Add an entitlements.mac.plist 
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -105,27 +153,43 @@ const handleScreenshot = async () => {
 let Cronjob
 
 
-ipcMain.on('startdetection', () => {
-  startDetection('mouse', mainWindow)
-  startDetection('keyboard', mainWindow)
-  Cronjob = cron.schedule('* * * * *', () => {
-    console.log('running a task every minute')
-    const activityArr = getInteractionTimestamps()
-    const currenttimestamp = Date.now()
-    const idleTime = calculateIdleTime(activityArr?.interactionTimestamps, currenttimestamp)
-    idleTime > 0 ? mainWindow.webContents.send("showIdlemodal", idleTime) :
-    console.log(idleTime, "idletime")
-    const activityPersent = calculateActivityPercentage(activityArr?.interactionActivityTimestamps, 60)
-    console.log(activityPersent, "activity persentage")
-    if (process.platform === "linux") {
-      takeScreenshotLinux()
-    } else {
-      handleScreenshot()
-    }
 
-    resetInteractionTimeStampsForActivity()
-  })
-})
+
+
+ipcMain.on('startdetection', () => {
+
+  startDetection('mouse', mainWindow);
+  startDetection('keyboard', mainWindow);
+
+  Cronjob = cron.schedule('* * * * *', () => {
+    console.log('running a task every minute');
+    const activityArr = getInteractionTimestamps();
+    // console.log(activityArr, "activityarr")
+    const currenttimestamp = Date.now();
+    const idleTime = calculateIdleTime(activityArr?.interactionTimestamps, currenttimestamp);
+
+    if (idleTime > 0) {
+      mainWindow.webContents.send("showIdlemodal", idleTime);
+      mainWindow.restore();
+    } else {
+      console.log(idleTime, "idletime");
+      const activityPercent = calculateActivityPercentage(activityArr?.interactionActivityTimestamps, 60);
+      mainWindow.webContents.send("activitypersent", activityPercent);
+      console.log(activityPercent, "activity percentage");
+
+      if (process.platform === "linux") {
+        takeScreenshotLinux();
+      } else {
+        handleScreenshot();
+      }
+    }
+    resetInteractionTimeStampsForActivity();
+  });
+});
+
+// ipcMain.on('IdlemodalHasbeemclosed', () => {
+//   isIdle = false
+// })
 
 ipcMain.on('stopdetection', () => {
   Cronjob.stop()

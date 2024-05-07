@@ -1,0 +1,61 @@
+/* Stopwatch.css */
+.stopwatch-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0px 8px 15px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    max-width: 600px;
+    margin: 20px auto;
+    color: #343a40;
+  }
+  
+  .project-list {
+    width: 100%;
+  }
+  
+  .project-card {
+    background-color: white;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 10px;
+    box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+  
+  .project-name {
+    font-size: 1.5rem;
+    color: #007bff;
+    margin-bottom: 10px;
+  }
+  
+  .project-time {
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+    color: #495057;
+  }
+  
+  .project-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  
+  .total-time-container {
+    margin-top: 20px;
+    text-align: center;
+  }
+  
+  .total-time-container h2 {
+    color: #007bff;
+  }
+  
+  .total-time {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #495057;
+  }
+  
