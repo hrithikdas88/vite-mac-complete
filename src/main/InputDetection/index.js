@@ -1,4 +1,4 @@
-import { spawn } from 'child_process'
+import { exec, spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { dialog, app } from 'electron'
@@ -34,7 +34,7 @@ function checkExecutableExists(executablePath) {
 }
 
 // Handles data from the process's stdout
-function handleData(data, type, mainWindow ) {
+function handleData(data, type, mainWindow) {
   if (data && detectionStatus) {
     const timestamp = new Date()
     const foridletimeChecker = timestamp.getTime()
@@ -42,9 +42,12 @@ function handleData(data, type, mainWindow ) {
       time: foridletimeChecker,
       type: type // 'mouse' or 'keyboard'
     }
-    interactionTimestamps.push(newEntry)
+
+      interactionTimestamps.push(newEntry)
+  
+   
     interactionActivityTimestamps.push(newEntry)
-    mainWindow.webContents.send("idletime", Date.now());
+    // mainWindow.webContents.send("idletime", Date.now());
     // console.log(interactionTimestamps, 'interaction timestamps')
 
     // You can re-enable and adjust this logic if needed
@@ -76,11 +79,13 @@ export function getInputDevicePath() {
   // console.log(eventNumber, "event")
   return `/dev/input/event${eventNumber}`;
 }
+ let detectionWin;
 
 // Main function to start detection
 export function startDetection(detectionType, mainWindow) {
   detectionStatus = true; resetInteractionTimeStampsForActivity();
   let executablePath;
+  let filename
 
   if (process.platform === 'linux') {
     if (detectionType === 'mouse') {
@@ -100,9 +105,14 @@ export function startDetection(detectionType, mainWindow) {
     }
   } else {
     const baseFilename =
-      detectionType === 'mouse' ? 'resources/MouseTracker' : 'resources/KeyboardTracker';
+      detectionType === 'mouse' ? 'resources/MouseTracker' : 'resources/Keyboardtracker';
     const filenameExtension = process.platform === 'win32' ? '.exe' : '';
-    const filename = detectionType === 'mouse' ? 'mousemac' : 'keyboardmac';
+    if (process.platform === 'darwin'){
+      filename = detectionType === 'mouse' ? 'mousemac' : 'keyboardmac';
+    } else {
+      filename = `${baseFilename}${filenameExtension}`
+    }
+   
     executablePath = isPackaged
       ? path.join(process.resourcesPath, 'app.asar.unpacked', `${baseFilename}${filenameExtension}`)
       : `./${filename}`;
@@ -113,9 +123,15 @@ export function startDetection(detectionType, mainWindow) {
     console.error('Executable path not found.');
     return;
   }
+  checkExecutableExists(executablePath)
+
+  
 
   processes[detectionType] = executablePath;
+   detectionWin = spawn(executablePath)
+  // console.log(detectionWin.stdout)
 
+if (process.platform === 'linux'){
   executablePath.stdout.on('data', (data) => handleData(data, detectionType, mainWindow));
   executablePath.stderr.on('data', (data) => {
     console.error(`stderr: ${data}`);
@@ -125,23 +141,49 @@ export function startDetection(detectionType, mainWindow) {
     console.log(`${detectionType} process exited with code ${code}`);
     delete processes[detectionType]; // Remove the reference once the process has exited
   });
+
+}
+
+  detectionWin.stdout.on('data', (data) => handleData(data, detectionType, mainWindow));
+  detectionWin.stderr.on('data', (data) => {
+    console.error(`stderr: ${data}`);
+    dialog.showErrorBox('Error', `${data}`);
+  });
+  detectionWin.on('close', (code) => {
+    console.log(`${detectionType} process exited with code ${code}`);
+    delete processes[detectionType]; // Remove the reference once the process has exited
+  });
 }
 
 // resetInteractionTimeStampsForActivity();
 export function stopDetection(detectionType) {
-  detectionStatus = false
-  const process = processes[detectionType]
-  if (process) {
-    process.on('close', (code, signal) => {
+  console.log("stop function triggered")
+  detectionStatus = false;
+
+  let processToKill;
+
+  if (process.platform === 'linux') {
+    processToKill = processes[detectionType];
+  } else {
+    processToKill = detectionWin;
+  }
+
+  if (processToKill) {
+    processToKill.on('close', (code, signal) => {
       console.log(
         `${detectionType} detection process terminated with code ${code} and signal ${signal}`
       )
-      delete processes[detectionType]
-    })
+      if (process.platform === 'linux') {
+        delete processes[detectionType];
+      } else {
+        detectionWin = null;
+      }
+    });
 
-    process.kill('SIGTERM')
-    console.log(`Termination signal sent to ${detectionType} detection process.`)
+    processToKill.kill('SIGTERM');
+    console.log(`Termination signal sent to ${detectionType} detection process.`);
   } else {
-    console.log(`No active ${detectionType} detection process found.`)
+    console.log(`No active ${detectionType} detection process found.`);
   }
 }
+

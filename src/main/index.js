@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, ipcRenderer, Notification } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, ipcRenderer, Notification, Tray } from 'electron'
 import path, { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -72,7 +72,7 @@ function createWindow() {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-
+      backgroundThrottling: false,
       devTools: true
     }
   })
@@ -102,6 +102,9 @@ function createWindow() {
 app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
+
+
+
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.Add an entitlements.mac.plist 
@@ -154,7 +157,13 @@ let Cronjob
 
 
 
+let Isidle
 
+ipcMain.on('IdlemodalHasbeemclosed' , ()=> {
+  console.log("modal has been closed")
+  startDetection('mouse', mainWindow);
+  startDetection('keyboard', mainWindow);
+})
 
 ipcMain.on('startdetection', () => {
 
@@ -171,6 +180,8 @@ ipcMain.on('startdetection', () => {
     if (idleTime > 0) {
       mainWindow.webContents.send("showIdlemodal", idleTime);
       mainWindow.restore();
+      stopDetection('mouse')
+      stopDetection('keyboard')  
     } else {
       console.log(idleTime, "idletime");
       const activityPercent = calculateActivityPercentage(activityArr?.interactionActivityTimestamps, 60);

@@ -9,7 +9,6 @@ const api = {
   showidlemoadl: (callback) => ipcRenderer.on("showIdlemodal", callback),
   activitypersent: (callback) => ipcRenderer.on("activitypersent", callback),
   auth: (callback) => ipcRenderer.on("auth", callback)
-
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
