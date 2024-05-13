@@ -1,52 +1,74 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, ipcRenderer, Notification, Tray } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  ipcRenderer,
+  Notification,
+  Tray
+} from 'electron'
 import path, { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { startDetection, stopDetection, getInteractionTimestamps, resetInteractionTimeStampsForActivity } from './InputDetection'
+import {
+  startDetection,
+  stopDetection,
+  getInteractionTimestamps,
+  resetInteractionTimeStampsForActivity
+} from './InputDetection'
 import takeScreenshot from './CronJobs'
 import cron from 'node-cron'
 import { calculateActivityPercentage, calculateIdleTime } from './ActivityAnalyser'
 import { GivePermission } from './Permissions'
 import { takeScreenshotLinux } from './CronJobs'
+const sqlite3 = require('sqlite3').verbose()
+import moment from 'moment'
+import sharp from 'sharp'
+import fs from 'fs'
 
-
+let db = new sqlite3.Database('./data.db', (err) => {
+  if (err) {
+    console.error('Error opening database:', err.message)
+  } else {
+    console.log('Connected to the SQLite database.')
+  }
+})
 
 const isPackaged = app.isPackaged
+
 let mainWindow
 
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient("electron", process.execPath, [
+    app.setAsDefaultProtocolClient('electron', process.execPath, [
       path.resolve(process.argv[1]),
-      console.log(path.resolve(process.argv[1])),
-    ]);
+      console.log(path.resolve(process.argv[1]))
+    ])
   }
 } else {
-  app.setAsDefaultProtocolClient("electron");
+  app.setAsDefaultProtocolClient('electron')
 }
 
-const gotTheLock = app.requestSingleInstanceLock();
+const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
-  app.quit();
-  console.log("nolock");
+  app.quit()
+  console.log('nolock')
 } else {
-  app.on("second-instance", (event, commandLine, workingDirectory) => {
-    console.log("yess");
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    console.log('yess')
     // Someone tried to run a second instance, we should focus our window.
     if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
     }
 
-    mainWindow.webContents.send("auth", {
-      commandLine,
-    });
-    dialog.showErrorBox(
-      "Welcome Back",
-      `You arrived from: ${commandLine.pop().slice(0, -1)}`
-    );
-  });
+    mainWindow.webContents.send('auth', {
+      commandLine
+    })
+    dialog.showErrorBox('Welcome Back', `You arrived from: ${commandLine.pop().slice(0, -1)}`)
+  })
 
   // // Create mainWindow, load the rest of the app, etc...
   // app.whenReady().then(() => {
@@ -54,11 +76,11 @@ if (!gotTheLock) {
   //   // setInterval(logCursorPosition, 10000);
   // });
 
-  app.on("open-url", (event, url) => {
-    console.log("open-url event triggered:", url);
+  app.on('open-url', (event, url) => {
+    console.log('open-url event triggered:', url)
 
-    dialog.showErrorBox("Welcome Back", `You arrived from: ${url}`);
-  });
+    dialog.showErrorBox('Welcome Back', `You arrived from: ${url}`)
+  })
 }
 
 function createWindow() {
@@ -79,7 +101,9 @@ function createWindow() {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
-    mainWindow.webContents.openDevTools()
+    if (!isPackaged) {
+      mainWindow.webContents.openDevTools()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -103,11 +127,8 @@ app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
-
-
-
   // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.Add an entitlements.mac.plist 
+  // and ignore CommandOrControl + R in production.Add an entitlements.mac.plist
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -117,11 +138,9 @@ app.whenReady().then(() => {
   ipcMain.on('ping', () => console.log('pong'))
 
   createWindow()
-  if (process.platform === "linux") {
+  if (process.platform === 'linux') {
     GivePermission()
-
   }
-
 
   // startMouseMovementDetectionwin()
 
@@ -146,8 +165,31 @@ app.on('window-all-closed', () => {
 const handleScreenshot = async () => {
   try {
     const dataURL = await takeScreenshot()
-    mainWindow.webContents.send("ssUrl", dataURL);
-    // console.log('Screenshot taken:', dataURL);
+
+    // const filePath = path.join(__dirname, `screenshot${Date.now()}.jpg`)
+
+    // // Save the buffer to a file
+    // fs.writeFileSync(filePath, dataURL)
+
+    // console.log(`Screenshot saved to: ${filePath}`)
+
+    // // Extract the image data from the base64-encoded string
+    // const matches = dataURL.match(/^data:image\/(png|jpeg);base64,(.+)$/);
+    // if (!matches) {
+    //   throw new Error("Invalid base64 image data");
+    // }
+    // const format = matches[1];
+    // const buffer = Buffer.from(matches[2], "base64");
+
+    // // Compress the image using sharp
+    // const compressedBuffer = await sharp(buffer)
+    //   .resize({ width: 1024, withoutEnlargement: true }) // Adjust dimensions as needed
+    //   .toFormat("jpeg", { quality: 100 }) // Set quality to 100% for best quality
+    //   .toBuffer();
+
+    // // Convert compressed buffer back to base64
+    // const compressedDataURL = `data:image/jpeg;base64,${compressedBuffer.toString("base64")}`;
+    return dataURL
   } catch (error) {
     console.error('Failed to take screenshot:', error)
   }
@@ -155,54 +197,108 @@ const handleScreenshot = async () => {
 
 let Cronjob
 
-
-
-let Isidle
-
-ipcMain.on('IdlemodalHasbeemclosed' , ()=> {
-  console.log("modal has been closed")
-  startDetection('mouse', mainWindow);
-  startDetection('keyboard', mainWindow);
+ipcMain.on('IdlemodalHasbeemclosed', (e, idleTimeAddedByuser) => {
+if(idleTimeAddedByuser){
+ console.log(idleTimeAddedByuser, "lollllllllll")
+const idleArr = getInteractionTimestamps()
+  const lastIdleReportTime = idleArr?.interactionTimestamps[idleArr?.interactionTimestamps.length - 1].time
+  const AddedTime = Date.now()
+  console.log(lastIdleReportTime , AddedTime ,"idleeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+}
+  console.log('modal has been closed')
+  startDetection('mouse', mainWindow)
+  startDetection('keyboard', mainWindow)
 })
 
-ipcMain.on('startdetection', () => {
+// db.serialize(() => {
+//   db.run(`CREATE TABLE IF NOT EXISTS activityData (
+//             id INTEGER PRIMARY KEY,
+//             projectId TEXT,
+//             startedTime TEXT,
+//             activityPercent INTEGER,
+//             currentTime TEXT,
+//             idleTime INTEGER,
+//             ScreenshotUrl TEXT
+//           )`);
+// });
 
-  startDetection('mouse', mainWindow);
-  startDetection('keyboard', mainWindow);
+ipcMain.on('startdetection', (e, projectId) => {
+  console.log(projectId, 'prid')
+  const startedTime = moment().format('HH:mm')
+  if (Cronjob) {
+    console.log('existing cron job has been stopped')
+    Cronjob.stop()
+  }
 
-  Cronjob = cron.schedule('* * * * *', () => {
-    console.log('running a task every minute');
-    const activityArr = getInteractionTimestamps();
-    // console.log(activityArr, "activityarr")
-    const currenttimestamp = Date.now();
-    const idleTime = calculateIdleTime(activityArr?.interactionTimestamps, currenttimestamp);
+  startDetection('mouse', mainWindow)
+  startDetection('keyboard', mainWindow)
+
+  Cronjob = cron.schedule('* * * * *', async () => {
+    console.log('running a task every minute')
+    let ScreenshotUrl
+    const activityArr = getInteractionTimestamps()
+    const currenttimestamp = Date.now()
+    const idleTime = calculateIdleTime(activityArr?.interactionTimestamps, currenttimestamp)
+    const currentTime = moment().format('HH:mm')
+    // Store data in the SQLite database
 
     if (idleTime > 0) {
-      mainWindow.webContents.send("showIdlemodal", idleTime);
-      mainWindow.restore();
+      mainWindow.webContents.send('showIdlemodal', idleTime)
+      mainWindow.restore()
       stopDetection('mouse')
-      stopDetection('keyboard')  
+      stopDetection('keyboard')
+      // let idleData = [{
+      //   projectId,
+      //   idleStartTime : activityArr?.interactionTimestamps[activityArr?.interactionTimestamps.length - 1],
+      //   idleEndTime : currenttimestamp
+      // }]
+      // console.log(idleData)
     } else {
-      console.log(idleTime, "idletime");
+      console.log(idleTime, 'idletime')
       const activityPercent = calculateActivityPercentage(activityArr?.interactionActivityTimestamps, 60);
-      mainWindow.webContents.send("activitypersent", activityPercent);
-      console.log(activityPercent, "activity percentage");
+      mainWindow.webContents.send('activitypersent', activityPercent)
+      const SortedActivities = [
+        ...new Map(
+          activityArr?.interactionActivityTimestamps.map((item) => [
+            Math.floor(item.time / 1000), 
+            item 
+          ])
+        ).values()
+      ];
+      // console.log(SortedActivities)
 
-      if (process.platform === "linux") {
-        takeScreenshotLinux();
+      console.log(activityPercent, 'activity percentage')
+
+      if (process.platform === 'linux') {
+        takeScreenshotLinux()
       } else {
-        handleScreenshot();
+        ScreenshotUrl = await handleScreenshot()
       }
+      let formData = {
+        projectId,
+        ProjectStartTime: startedTime,
+        CronStartTime: currentTime,
+        Activity: SortedActivities,
+        ActiveSeconds : SortedActivities.length ,
+        ScreenshotUrl
+      }
+      console.log(formData)
+      // Insert data into the table
+      // db.run(`INSERT INTO activityData (projectId, startedTime, activityPercent, currentTime, idleTime, ScreenshotUrl)
+      //         VALUES (?, ?, ?, ?, ?, ?)`, [projectId, startedTime, activityPercent, currentTime, idleTime, ScreenshotUrl], function (err) {
+      //   if (err) {
+      //     return console.log(err.message);
+      //   }
+      //   console.log(`A row has been inserted with rowid ${this.lastID}`);
+      // });
     }
-    resetInteractionTimeStampsForActivity();
-  });
-});
 
-// ipcMain.on('IdlemodalHasbeemclosed', () => {
-//   isIdle = false
-// })
+    resetInteractionTimeStampsForActivity()
+  })
+})
 
 ipcMain.on('stopdetection', () => {
+  // db.run('DELETE FROM activityData');
   Cronjob.stop()
   stopDetection('mouse')
   stopDetection('keyboard')
@@ -240,5 +336,3 @@ ipcMain.on('stopdetection', () => {
 //           notification.show();
 //       });
 //   });
-
-

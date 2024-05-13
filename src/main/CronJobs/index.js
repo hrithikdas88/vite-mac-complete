@@ -2,6 +2,7 @@ import { desktopCapturer, screen, Notification, dialog } from 'electron';
 import { exec } from 'child_process'
 import fs from "fs"
 import path from 'path';
+import sharp from 'sharp';
 
 
 
@@ -21,15 +22,25 @@ async function captureScreen() {
 export default async function takeScreenshot() {
   try {
     const screenShotInfo = await captureScreen();
-    const dataURL = screenShotInfo.toDataURL();
+
+    // Convert to binary data
+    const imageBuffer = screenShotInfo.toDataURL(); // Using toPNG() to get a Buffer
+
+    // Compress using sharp and get bytes
+    // const compressedBuffer = await sharp(imageBuffer)
+    //   .resize({ width: 1280, withoutEnlargement: true }) // Adjust dimensions as needed
+    //   .jpeg({ quality: 85 }) // Reduce quality for a smaller file size
+    //   .toBuffer();
+
     const notification = new Notification({
-      title: 'Screenshot Taken',
-      body: 'Screenshot has been captured successfully',
+      title: "Screenshot Taken",
+      body: "Screenshot has been captured successfully",
     });
     notification.show();
-    return dataURL;
+
+    return imageBuffer; // Returns the screenshot as bytes (Buffer)
   } catch (error) {
-    console.error('Failed to capture screenshot:', error);
+    console.error("Failed to capture screenshot:", error);
     throw error;
   }
 }

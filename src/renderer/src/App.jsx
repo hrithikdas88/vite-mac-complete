@@ -9,6 +9,7 @@ import { idleTimeState } from './components/Atoms/Idle'
 import { useRecoilState } from 'recoil'
 
 function App() {
+  console.log(window)
   const [img, setImg] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [idletime, setIdletime] = useState(0)
@@ -16,6 +17,7 @@ function App() {
   const [auth, setAuth] = useState(false)
   const [idle , setidle] =  useRecoilState(idleTimeState)
   const [addIdle, setAddidle] = useState(false)
+  const [savedata , setSaveData] = useState(false)
 
   useEffect(() => {
     window.api.idletimer((event, data) => {
@@ -41,20 +43,29 @@ function App() {
         setAuth(true)
       }
     })
+    window.api.auth((e, data) => {
+      if(data){
+        console.log("data" , data)
+        setSaveData(true)
+      }
+    })
   }, [])
 
-  const startDetection = () => window.electron.ipcRenderer.send('startdetection')
+  const startDetection = (projectName) => {
+    window.electron.ipcRenderer.send('startdetection', projectName);
+}
+
   const stopDetection = () => window.electron.ipcRenderer.send('stopdetection')
 
   const handlemodalclose = () =>{
-    window.electron.ipcRenderer.send('IdlemodalHasbeemclosed')
+    window.electron.ipcRenderer.send('IdlemodalHasbeemclosed', false)
     setShowModal(false)
   } 
 
   const handleAddidletime = () => {
     setAddidle(true)
     setShowModal(false)
-    window.electron.ipcRenderer.send('IdlemodalHasbeemclosed')
+    window.electron.ipcRenderer.send('IdlemodalHasbeemclosed' , idletime)
   }
 
  
@@ -71,6 +82,7 @@ function App() {
           idletime={idletime}
           addIdle = {addIdle}
           setAddidle ={setAddidle}
+          savedata={savedata}
         />
 
         {activitypersent && (

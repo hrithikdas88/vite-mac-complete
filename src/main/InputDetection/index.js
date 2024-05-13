@@ -116,20 +116,22 @@ export function startDetection(detectionType, mainWindow) {
     executablePath = isPackaged
       ? path.join(process.resourcesPath, 'app.asar.unpacked', `${baseFilename}${filenameExtension}`)
       : `./${filename}`;
-  }
 
-  // Check if executablePath is valid before proceeding
-  if (!executablePath) {
-    console.error('Executable path not found.');
-    return;
+      if (!executablePath) {
+        console.error('Executable path not found.');
+        return;
+      }
+      checkExecutableExists(executablePath)
+    
+      
+    
+      processes[detectionType] = executablePath;
+       detectionWin = spawn(executablePath)
+      // console.log(detectionWin.stdout)
   }
-  checkExecutableExists(executablePath)
 
   
-
-  processes[detectionType] = executablePath;
-   detectionWin = spawn(executablePath)
-  // console.log(detectionWin.stdout)
+ 
 
 if (process.platform === 'linux'){
   executablePath.stdout.on('data', (data) => handleData(data, detectionType, mainWindow));
