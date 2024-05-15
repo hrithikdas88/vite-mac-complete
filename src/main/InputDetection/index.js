@@ -1,10 +1,8 @@
-import { exec, spawn } from 'child_process'
+import { spawn } from 'child_process'
 import fs from 'fs'
-import path from 'path'
 import { dialog, app } from 'electron'
 import { execSync } from 'child_process'
 
-const isPackaged = app.isPackaged
 const processes = {} // This will track each spawned process by type
 
 
@@ -33,20 +31,36 @@ function checkExecutableExists(executablePath) {
   return true
 }
 
-// Handles data from the process's stdout
-function handleData(data, type, mainWindow) {
+
+const handleActivity = (type) => {
+  if (type === "mouse") {
+    // console.log(global.sharedVariables.mouseMovements, "mouse")
+    global.sharedVariables.mouseMovements = global.sharedVariables.mouseMovements + 1
+  } else {
+    global.sharedVariables.keyboardMovements = global.sharedVariables.keyboardMovements + 1
+  }
+}
+
+function handleData(data, type, mainWindow, projectId) {
   if (data && detectionStatus) {
     const timestamp = new Date()
     const foridletimeChecker = timestamp.getTime()
-    const newEntry = {
-      time: foridletimeChecker,
-      type: type // 'mouse' or 'keyboard'
-    }
 
-      interactionTimestamps.push(newEntry)
-  
-   
-    interactionActivityTimestamps.push(newEntry)
+    handleActivity(type)
+
+    // const newEntry = {
+    //   time: foridletimeChecker,
+    //   type: type // 'mouse' or 'keyboard'
+    // }
+
+    // interactionTimestamps.push(newEntry)
+
+
+    // interactionActivityTimestamps.push(newEntry)
+
+    // global.sharedVariables.userActivity = {...global.sharedVariables.userActivity, [projectId]: {[type]: }}  
+
+
     // mainWindow.webContents.send("idletime", Date.now());
     // console.log(interactionTimestamps, 'interaction timestamps')
 
@@ -79,10 +93,10 @@ export function getInputDevicePath() {
   // console.log(eventNumber, "event")
   return `/dev/input/event${eventNumber}`;
 }
- let detectionWin;
+let detectionWin;
 
 // Main function to start detection
-export function startDetection(detectionType, mainWindow) {
+export function startDetection(detectionType, mainWindow, projectId) {
   detectionStatus = true; resetInteractionTimeStampsForActivity();
   let executablePath;
   let filename
@@ -103,61 +117,45 @@ export function startDetection(detectionType, mainWindow) {
       console.error('Unsupported detection type on Linux.');
       return;
     }
-  } else {
-    const baseFilename =
-      detectionType === 'mouse' ? 'resources/MouseTracker' : 'resources/Keyboardtracker';
-    const filenameExtension = process.platform === 'win32' ? '.exe' : '';
-    if (process.platform === 'darwin'){
-      filename = detectionType === 'mouse' ? 'mousemac' : 'keyboardmac';
-    } else {
-      filename = `${baseFilename}${filenameExtension}`
-    }
-   
-    executablePath = isPackaged
-      ? path.join(process.resourcesPath, 'app.asar.unpacked', `${baseFilename}${filenameExtension}`)
-      : `./${filename}`;
 
-      if (!executablePath) {
-        console.error('Executable path not found.');
-        return;
-      }
-      checkExecutableExists(executablePath)
-    
-      
-    
-      processes[detectionType] = executablePath;
-       detectionWin = spawn(executablePath)
-      // console.log(detectionWin.stdout)
+
+
+
+    // processes[detectionType] = executablePath;
+    //  detectionWin = spawn(executablePath)
+    // console.log(detectionWin.stdout)
   }
 
-  
- 
 
-if (process.platform === 'linux'){
-  executablePath.stdout.on('data', (data) => handleData(data, detectionType, mainWindow));
-  executablePath.stderr.on('data', (data) => {
-    console.error(`stderr: ${data}`);
-    dialog.showErrorBox('Error', `${data}`);
-  });
-  executablePath.on('close', (code) => {
-    console.log(`${detectionType} process exited with code ${code}`);
-    delete processes[detectionType]; // Remove the reference once the process has exited
-  });
 
-}
 
-  detectionWin.stdout.on('data', (data) => handleData(data, detectionType, mainWindow));
-  detectionWin.stderr.on('data', (data) => {
-    console.error(`stderr: ${data}`);
-    dialog.showErrorBox('Error', `${data}`);
-  });
-  detectionWin.on('close', (code) => {
-    console.log(`${detectionType} process exited with code ${code}`);
-    delete processes[detectionType]; // Remove the reference once the process has exited
-  });
+  if (process.platform === 'linux') {
+    executablePath.stdout.on('data', (data) => handleData(data, detectionType, mainWindow, projectId));
+    executablePath.stderr.on('data', (data) => {
+      console.error(`stderr: ${data}`);
+      dialog.showErrorBox('Error', `${data}`);
+    });
+    executablePath.on('close', (code) => {
+      console.log(`${detectionType} process exited with code ${code}`);
+      delete processes[detectionType]; // Remove the reference once the process has exited
+    });
+
+  }
+
+  // detectionWin.stdout.on('data', (data) => handleData(data, detectionType, mainWindow));
+  // detectionWin.stderr.on('data', (data) => {
+  //   console.error(`stderr: ${data}`);
+  //   dialog.showErrorBox('Error', `${data}`);
+  // });
+  // detectionWin.on('close', (code) => {
+  //   console.log(`${detectionType} process exited with code ${code}`);
+  //   delete processes[detectionType]; // Remove the reference once the process has exited
+  // });
 }
 
 // resetInteractionTimeStampsForActivity();
+
+
 export function stopDetection(detectionType) {
   console.log("stop function triggered")
   detectionStatus = false;

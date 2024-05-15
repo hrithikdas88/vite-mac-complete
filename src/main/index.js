@@ -8,8 +8,13 @@ import {
   Notification,
   Tray
 } from 'electron'
+import cron from 'node-cron'
+import { format } from 'date-fns'
 import path, { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+
+import "./store/index";
+
 import icon from '../../resources/icon.png?asset'
 import {
   startDetection,
@@ -17,23 +22,12 @@ import {
   getInteractionTimestamps,
   resetInteractionTimeStampsForActivity
 } from './InputDetection'
-import takeScreenshot from './CronJobs'
-import cron from 'node-cron'
 import { calculateActivityPercentage, calculateIdleTime } from './ActivityAnalyser'
 import { GivePermission } from './Permissions'
 import { takeScreenshotLinux } from './CronJobs'
-const sqlite3 = require('sqlite3').verbose()
-import moment from 'moment'
-import sharp from 'sharp'
-import fs from 'fs'
+import takeScreenshot from './CronJobs'
+import { formatDateToDefaultFormat, getTimeSlot } from './helpers/date'
 
-let db = new sqlite3.Database('./data.db', (err) => {
-  if (err) {
-    console.error('Error opening database:', err.message)
-  } else {
-    console.log('Connected to the SQLite database.')
-  }
-})
 
 const isPackaged = app.isPackaged
 
@@ -70,12 +64,6 @@ if (!gotTheLock) {
     dialog.showErrorBox('Welcome Back', `You arrived from: ${commandLine.pop().slice(0, -1)}`)
   })
 
-  // // Create mainWindow, load the rest of the app, etc...
-  // app.whenReady().then(() => {
-  //   createWindow();
-  //   // setInterval(logCursorPosition, 10000);
-  // });
-
   app.on('open-url', (event, url) => {
     console.log('open-url event triggered:', url)
 
@@ -84,7 +72,6 @@ if (!gotTheLock) {
 }
 
 function createWindow() {
-  // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
@@ -111,8 +98,6 @@ function createWindow() {
     return { action: 'deny' }
   })
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -120,30 +105,19 @@ function createWindow() {
   }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
-  // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.Add an entitlements.mac.plist
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
   ipcMain.on('ping', () => console.log('pong'))
 
   createWindow()
   if (process.platform === 'linux') {
     GivePermission()
   }
-
-  // startMouseMovementDetectionwin()
-
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
@@ -151,155 +125,80 @@ app.whenReady().then(() => {
   })
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
 
-//Logicss
-
-const handleScreenshot = async () => {
-  try {
-    const dataURL = await takeScreenshot()
-
-    // const filePath = path.join(__dirname, `screenshot${Date.now()}.jpg`)
-
-    // // Save the buffer to a file
-    // fs.writeFileSync(filePath, dataURL)
-
-    // console.log(`Screenshot saved to: ${filePath}`)
-
-    // // Extract the image data from the base64-encoded string
-    // const matches = dataURL.match(/^data:image\/(png|jpeg);base64,(.+)$/);
-    // if (!matches) {
-    //   throw new Error("Invalid base64 image data");
-    // }
-    // const format = matches[1];
-    // const buffer = Buffer.from(matches[2], "base64");
-
-    // // Compress the image using sharp
-    // const compressedBuffer = await sharp(buffer)
-    //   .resize({ width: 1024, withoutEnlargement: true }) // Adjust dimensions as needed
-    //   .toFormat("jpeg", { quality: 100 }) // Set quality to 100% for best quality
-    //   .toBuffer();
-
-    // // Convert compressed buffer back to base64
-    // const compressedDataURL = `data:image/jpeg;base64,${compressedBuffer.toString("base64")}`;
-    return dataURL
-  } catch (error) {
-    console.error('Failed to take screenshot:', error)
-  }
-}
-
-let Cronjob
+let mainJob
+let idleTimerJob
 
 ipcMain.on('IdlemodalHasbeemclosed', (e, idleTimeAddedByuser) => {
-if(idleTimeAddedByuser){
- console.log(idleTimeAddedByuser, "lollllllllll")
-const idleArr = getInteractionTimestamps()
-  const lastIdleReportTime = idleArr?.interactionTimestamps[idleArr?.interactionTimestamps.length - 1].time
-  const AddedTime = Date.now()
-  console.log(lastIdleReportTime , AddedTime ,"idleeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
-}
+  if (idleTimeAddedByuser) {
+    console.log(idleTimeAddedByuser, "lollllllllll")
+    const idleArr = getInteractionTimestamps()
+    const lastIdleReportTime = idleArr?.interactionTimestamps[idleArr?.interactionTimestamps.length - 1].time
+    const AddedTime = Date.now()
+  }
   console.log('modal has been closed')
   startDetection('mouse', mainWindow)
   startDetection('keyboard', mainWindow)
 })
 
-// db.serialize(() => {
-//   db.run(`CREATE TABLE IF NOT EXISTS activityData (
-//             id INTEGER PRIMARY KEY,
-//             projectId TEXT,
-//             startedTime TEXT,
-//             activityPercent INTEGER,
-//             currentTime TEXT,
-//             idleTime INTEGER,
-//             ScreenshotUrl TEXT
-//           )`);
-// });
-
 ipcMain.on('startdetection', (e, projectId) => {
-  console.log(projectId, 'prid')
-  const startedTime = moment().format('HH:mm')
-  if (Cronjob) {
-    console.log('existing cron job has been stopped')
-    Cronjob.stop()
+  const projectStartTime = new Date()
+
+  if (global.sharedVariables.timerIsRunning) {
+    const activityLength = global.sharedVariables.userActivity.length
+    global.sharedVariables.userActivity = global.sharedVariables.userActivity.map((activity, index) => (index === activityLength - 1 ? { ...activity, mouse: global.sharedVariables.mouseMovements, keyboard: global.sharedVariables.keyboardMovements } : activity))
+    global.sharedVariables.userActivity.push({ time_slot: getTimeSlot(projectStartTime), start_time: formatDateToDefaultFormat(projectStartTime), project_id: projectId, mouse: 0, keyboard: 0 })
+  } else {
+    global.sharedVariables.userActivity.push({ time_slot: getTimeSlot(projectStartTime), start_time: formatDateToDefaultFormat(projectStartTime), project_id: projectId, mouse: 0, keyboard: 0 })
+  }
+  global.sharedVariables.timerIsRunning = true
+
+  if (mainJob) {
+    mainJob.stop()
   }
 
-  startDetection('mouse', mainWindow)
-  startDetection('keyboard', mainWindow)
+  startDetection('mouse', mainWindow, projectId)
+  startDetection('keyboard', mainWindow, projectId)
 
-  Cronjob = cron.schedule('* * * * *', async () => {
-    console.log('running a task every minute')
-    let ScreenshotUrl
+  console.log(global.sharedVariables.userActivity, "user variable")
+  mainJob = cron.schedule('*/10 * * * *', async () => {
     const activityArr = getInteractionTimestamps()
     const currenttimestamp = Date.now()
     const idleTime = calculateIdleTime(activityArr?.interactionTimestamps, currenttimestamp)
-    const currentTime = moment().format('HH:mm')
-    // Store data in the SQLite database
+
+    const activityLength = global.sharedVariables.userActivity.length
+    global.sharedVariables.userActivity = global.sharedVariables.userActivity.map((activity, index) => (index === activityLength - 1 ? { ...activity, mouse: global.sharedVariables.mouseMovements, keyboard: global.sharedVariables.keyboardMovements } : activity))
+
 
     if (idleTime > 0) {
       mainWindow.webContents.send('showIdlemodal', idleTime)
       mainWindow.restore()
       stopDetection('mouse')
       stopDetection('keyboard')
-      // let idleData = [{
-      //   projectId,
-      //   idleStartTime : activityArr?.interactionTimestamps[activityArr?.interactionTimestamps.length - 1],
-      //   idleEndTime : currenttimestamp
-      // }]
-      // console.log(idleData)
     } else {
-      console.log(idleTime, 'idletime')
-      const activityPercent = calculateActivityPercentage(activityArr?.interactionActivityTimestamps, 60);
-      mainWindow.webContents.send('activitypersent', activityPercent)
-      const SortedActivities = [
-        ...new Map(
-          activityArr?.interactionActivityTimestamps.map((item) => [
-            Math.floor(item.time / 1000), 
-            item 
-          ])
-        ).values()
-      ];
-      // console.log(SortedActivities)
 
-      console.log(activityPercent, 'activity percentage')
 
-      if (process.platform === 'linux') {
-        takeScreenshotLinux()
-      } else {
-        ScreenshotUrl = await handleScreenshot()
-      }
-      let formData = {
-        projectId,
-        ProjectStartTime: startedTime,
-        CronStartTime: currentTime,
-        Activity: SortedActivities,
-        ActiveSeconds : SortedActivities.length ,
-        ScreenshotUrl
-      }
-      console.log(formData)
-      // Insert data into the table
-      // db.run(`INSERT INTO activityData (projectId, startedTime, activityPercent, currentTime, idleTime, ScreenshotUrl)
-      //         VALUES (?, ?, ?, ?, ?, ?)`, [projectId, startedTime, activityPercent, currentTime, idleTime, ScreenshotUrl], function (err) {
-      //   if (err) {
-      //     return console.log(err.message);
-      //   }
-      //   console.log(`A row has been inserted with rowid ${this.lastID}`);
-      // });
+
     }
+    const apiSuccess = false
+    if (apiSuccess) {
+      resetInteractionTimeStampsForActivity()
+      global.sharedVariables.userActivity = []
+    }
+    global.sharedVariables.userActivity.push({ time_slot: getTimeSlot(projectStartTime), start_time: formatDateToDefaultFormat(projectStartTime), project_id: projectId, mouse: 0, keyboard: 0 })
 
-    resetInteractionTimeStampsForActivity()
   })
 })
 
 ipcMain.on('stopdetection', () => {
-  // db.run('DELETE FROM activityData');
-  Cronjob.stop()
+  global.sharedVariables.timerIsRunning = false
+
+  mainJob.stop()
   stopDetection('mouse')
   stopDetection('keyboard')
 })
